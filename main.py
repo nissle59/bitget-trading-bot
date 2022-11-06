@@ -1,10 +1,10 @@
 # This is a sample Python script.
+import datetime
 import json
 import time
-import urllib.parse
+
 import requests
-import datetime
-from tqdm import tqdm
+
 # Press Shift+F10 to execute it or replace it with your code.
 # Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
 url = 'https://api.binance.com'
@@ -236,7 +236,15 @@ def check_schema(first_pair, second_pair, third_pair : dict, base_count = 100, f
 if __name__ == '__main__':
 
     base_count = 100
-    base_currency = 'USDT'
+    base_currency = 'BUSD'
+    stf = '[{0}]: BOT STARTED with {1} {2}\n'.format(
+        datetime.datetime.now().__str__(), base_count.__str__(), base_currency)
+    try:
+        f = open('log.log', 'a')
+        f.write(stf)
+        f.close()
+    except:
+        print('Cant print to file')
     schemas = []
     c = 0
     full_income = 0
@@ -273,6 +281,7 @@ if __name__ == '__main__':
         threshold = 0
         symbols = get_symbols_data('symbols_info.json')
         symbols = get_exchange_symbols('s.json')
+
         for sch in schemas:
             sch.calculate_schema(symbols)
             if (sch.final_percent>threshold-0.01) and (sch.base_currency == 'BUSD'):#(sch.base_currency in ['USDT','BUSD','USDC']):
@@ -292,7 +301,10 @@ if __name__ == '__main__':
                     st += 'Difference: {0}'.format(float(sch.final_count) - i)+'\n'
                     st += '------------------------------------------------------------------\n\n'
 
-                    stf = '[{0}]: {1} {2} -> {3} ({4}) -> {5} ({6}) -> {7} ({8}) =>> {9}\n'.format(datetime.datetime.now().__str__(),sch.base_count,sch.base_currency,sch.first_pair,sch.first_rate,sch.second_pair,sch.second_rate,sch.third_pair,sch.third_rate,sch.base_count+i)
+                    stf = '[{0}]: {1} {2} -> {3} ({4}) -> {5} ({6}) -> {7} ({8}) =>> {9}; FULL: {10}\n'.format(
+                        datetime.datetime.now().__str__(), sch.base_count, sch.base_currency, sch.first_pair,
+                        sch.first_rate, sch.second_pair, sch.second_rate, sch.third_pair, sch.third_rate,
+                        sch.base_count + i, full_income.__str__())
                     try:
                         f = open('log.log','a')
                         f.write(stf)
