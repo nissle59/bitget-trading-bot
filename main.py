@@ -1,30 +1,49 @@
 # This is a sample Python script.
 import datetime
 import json
+import logging
 import time
 
 import requests
 
-# Press Shift+F10 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
+logger_stream = logging.getLogger('STREAM')
+logger_main = logging.getLogger('MAIN')
+logger_stream.setLevel(logging.INFO)
+logger_main.setLevel(logging.INFO)
+
+# настройка обработчика и форматировщика для logger2
+handler_stream = logging.FileHandler(f"stream.log", mode='w')
+handler_main = logging.FileHandler(f"main.log", mode='a')
+formatter_stream = logging.Formatter("%(name)s [%(asctime)s] %(levelname)s %(message)s")
+formatter_main = logging.Formatter("[%(asctime)s] %(levelname)s %(message)s")
+
+# добавление форматировщика к обработчику
+handler_stream.setFormatter(formatter_stream)
+handler_main.setFormatter(formatter_main)
+# добавление обработчика к логгеру
+logger_stream.addHandler(handler_stream)
+logger_main.addHandler(handler_main)
+
 url = 'https://api.binance.com'
 info = {}
 symbols = {}
 time_const = {
-    'MINUTE':60,
+    'MINUTE': 60,
     'DAY': 60 * 60 * 24,
-    'SECOND' : 1
+    'SECOND': 1
 }
 
 class Schema:
     base_currency = ''
+    second_currency = ''
+    third_currency = ''
     base_count = 100
     proxy_currency = ''
     proxy_count = 0.00
     first_pair = ''
     second_pair = ''
     second_count = 0.00
-    #third_pair = ''
+    # third_pair = ''
     final_count = 0.00
     final_percent = 0.02
     third_pair = ''
@@ -48,7 +67,9 @@ class Schema:
     def calculate_schema(self, symbols: dict):
         self.__first_symbol = symbols[self.first_pair]
         self.base_currency = self.__first_symbol['quoteAsset']
+        self.second_currency = self.__first_symbol['baseAsset']
         self.__second_symbol = symbols[self.second_pair]
+        self.third_currency = self.__second_symbol['baseAsset']
         #self.__third_symbol = symbols[self.__third_pair]
         try:
             self.proxy_currency = self.__first_symbol['baseAsset']
@@ -218,35 +239,44 @@ def find_3rd_pair(first_pair, second_pair, symbols_dict):
     else:
         return True
 
-def check_schema(first_pair, second_pair, third_pair : dict, base_count = 100, fee = 0.00075):
-    first_symbol = first_pair
-    second_symbol = second_pair
-    third_symbol = third_pair
+
+def check_schema(schema: Schema):
+    s_names = [schema.first_pair, schema.second_pair, schema.third_pair]
+    buf = '%5B%22' + '%22,%22'.join(s_names) + '%22%5D'
+    path = '/api/v3/ticker/bookTicker?symbols=' + buf
+    r = requests.get(url + path)
+    d = {}
+    js = json.loads(r.content.decode('utf-8'))
+    for symbol in js:
+        d.update({symbol['symbol']: symbol})
+    first_symbol = d[schema.first_pair]
+    second_symbol = d[schema.second_pair]
+    third_symbol = d[schema.third_pair]
     first_rate = float(first_symbol['askPrice'])
-    proxy_count = base_count / first_rate * (1 - fee)
+    proxy_count = schema.base_count / first_rate * (1 - schema.fee)
     second_rate = float(second_symbol['askPrice'])
-    proxy_count = proxy_count / second_rate * (1 - fee)
+    proxy_count = proxy_count / second_rate * (1 - schema.fee)
     second_count = proxy_count
     third_rate = float(third_symbol['bidPrice'])
-    final_count = second_count * third_rate * (1 - fee)
+    final_count = second_count * third_rate * (1 - schema.fee)
+    schema.first_rate = first_rate
+    schema.second_rate = second_rate
+    schema.third_rate = third_rate
+    schema.final_count = final_count
+    schema.final_percent = schema.calculate_percent(schema.base_count, schema.final_count)
+    logger_stream.debug(
+        f'{first_symbol["symbol"]} ({first_rate}) -> {second_symbol["symbol"]} ({second_rate}) -> {third_symbol["symbol"]} ({third_rate}) -> {base_currency} ({final_count})')
     o = final_count - base_count
     return o
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-
     base_count = 100
     base_currency = 'BUSD'
     stf = '[{0}]: BOT STARTED with {1} {2}\n'.format(
         datetime.datetime.now().__str__(), base_count.__str__(), base_currency)
-    try:
-        f = open('log.log', 'a')
-        f.write(stf)
-        f.close()
-    except:
-        print('Cant print to file')
+    logger_main.info(stf)
     schemas = []
-    c = 0
     full_income = 0
     start_time = datetime.datetime.now()
     info = get_exchange_info('info.json')
@@ -260,37 +290,29 @@ if __name__ == '__main__':
                 s = Schema(first_symbol, second_symbol)
                 s.calculate_schema(symbols)
                 if not (s.error):
-                    c += 1
-                    schemas.append(s)
-    while True:
-        '''
-        info = get_exchange_info('info.json')
-        symbols = get_symbols_data('symbols_info.json')
-        symbols = get_exchange_symbols('s.json')
-        for first_symbol in symbols:
-            for second_symbol in symbols:
-                #print(first_symbol + " : "+ second_symbol)
-                status = find_3rd_pair(first_symbol, second_symbol, symbols)
-                if status:
-                    s = Schema(first_symbol, second_symbol)
-                    s.calculate_schema(symbols)
-                    if not(s.error):
-                        c += 1
+                    if s.base_currency in ['BUSD', 'USDT', 'USDC']:
                         schemas.append(s)
-        '''
-        threshold = 0
-        symbols = get_symbols_data('symbols_info.json')
+    logger_main.info(f'Total schemas: {str(len(schemas))}')
+    threshold = 0
+    logger_main.info(f'Current profit threshold: {str(threshold)}')
+    pairs = []
+    for item in schemas:
+        pairs.append(item.first_pair)
+        pairs.append(item.second_pair)
+        pairs.append(item.third_pair)
+    print(len(pairs))
+    pairs = set(pairs)
+    logger_main.info(f'Updating {str(len(pairs))} pairs...')
+    print(len(pairs))
+    while True:
         symbols = get_exchange_symbols('s.json')
-
         for sch in schemas:
             sch.calculate_schema(symbols)
-            if (sch.final_percent>threshold-0.01) and (sch.base_currency == 'BUSD'):#(sch.base_currency in ['USDT','BUSD','USDC']):
-                fp = get_symbol_market(sch.first_pair)
-                sp = get_symbol_market(sch.second_pair)
-                tp = get_symbol_market(sch.third_pair)
-                i = check_schema(fp,sp,tp, sch.base_count, sch.fee)
+            if (sch.base_currency in ['BUSD', 'USDT', 'USDC']) and (sch.final_count - sch.base_count > threshold):
+                i = check_schema(sch)
                 if i > threshold:
                     full_income += i
+                    """
                     st = '------------------------------------------------------------------\n'
                     st += 'Base count: 100 ' + sch.base_currency + '\n'
                     st += sch.first_pair + ' ' + sch.first_rate.__str__() + ' ' + sch.second_count.__str__() + ' ' + ';'.join(symbols[sch.first_pair]['permissions']) +'\n'
@@ -300,35 +322,17 @@ if __name__ == '__main__':
                     st += 'Total in '+ (datetime.datetime.now() - start_time).__str__() + ': +'+ round(full_income,2).__str__() + ' USD\n'
                     st += 'Difference: {0}'.format(float(sch.final_count) - i)+'\n'
                     st += '------------------------------------------------------------------\n\n'
-
+                    """
                     stf = '[{0}]: {1} {2} -> {3} ({4}) -> {5} ({6}) -> {7} ({8}) =>> {9}; FULL: {10}\n'.format(
                         datetime.datetime.now().__str__(), sch.base_count, sch.base_currency, sch.first_pair,
                         sch.first_rate, sch.second_pair, sch.second_rate, sch.third_pair, sch.third_rate,
                         sch.base_count + i, full_income.__str__())
-                    try:
-                        f = open('log.log','a')
-                        f.write(stf)
-                        f.close()
-                    except:
-                        print('Cant print to file')
-                    try:
-                        print(st)
-                    except:
-                        print('cant print string')
+                    logger_main.info(stf)
+                    logger_stream.info(stf)
                 else:
-                    st = 'Profit: {0}, Difference: {1}'.format(i,float(sch.final_count-sch.base_count)-i)
-                    try:
-                        f = open('log_debug.log','a')
-                        f.write(st+'\n')
-                        f.close()
-                    except:
-                        pass
+                    st = '{0} -> {1} -> {2} -> {0}: Profit: {3}, Difference: {4}'.format(sch.base_currency,
+                                                                                         sch.second_currency,
+                                                                                         sch.third_currency, i, float(
+                            sch.final_count - sch.base_count) - i)
+                    logger_stream.info(st)
                     print(st)
-
-        #print('Total schemas: '+ len(schemas).__str__())
-        #schemas = []
-        c = 0
-
-
-
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
