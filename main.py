@@ -293,15 +293,24 @@ if __name__ == '__main__':
                     st += '------------------------------------------------------------------\n\n'
 
                     stf = '[{0}]: {1} {2} -> {3} ({4}) -> {5} ({6}) -> {7} ({8}) =>> {9}\n'.format(datetime.datetime.now().__str__(),sch.base_count,sch.base_currency,sch.first_pair,sch.first_rate,sch.second_pair,sch.second_rate,sch.third_pair,sch.third_rate,sch.base_count+i)
-                    f = open('log.log','a')
-                    f.write(stf)
-                    f.close()
-                    print(st)
+                    try:
+                        f = open('log.log','a')
+                        f.write(stf)
+                        f.close()
+                    except:
+                        print('Cant print to file')
+                    try:
+                        print(st)
+                    except:
+                        print('cant print string')
                 else:
                     st = 'Profit: {0}, Difference: {1}'.format(i,float(sch.final_count-sch.base_count)-i)
-                    f = open('log_debug.log','a')
-                    f.write(st+'\n')
-                    f.close()
+                    try:
+                        f = open('log_debug.log','a')
+                        f.write(st+'\n')
+                        f.close()
+                    except:
+                        pass
                     print(st)
 
         #print('Total schemas: '+ len(schemas).__str__())
