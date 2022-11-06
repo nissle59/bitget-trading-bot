@@ -314,7 +314,7 @@ if __name__ == '__main__':
                     print(st)
 
         #print('Total schemas: '+ len(schemas).__str__())
-        schemas = []
+        #schemas = []
         c = 0
 
 
