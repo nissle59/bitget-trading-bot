@@ -273,8 +273,7 @@ def check_schema(schema: Schema):
 if __name__ == '__main__':
     base_count = 100
     base_currency = 'BUSD'
-    stf = '[{0}]: BOT STARTED with {1} {2}\n'.format(
-        datetime.datetime.now().__str__(), base_count.__str__(), base_currency)
+    stf = 'BOT STARTED with {0} {1}\n'.format(base_count.__str__(), base_currency)
     logger_main.info(stf)
     schemas = []
     full_income = 0
