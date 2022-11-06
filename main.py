@@ -299,6 +299,9 @@ if __name__ == '__main__':
                     print(st)
                 else:
                     st = 'Profit: {0}, Difference: {1}'.format(i,float(sch.final_count-sch.base_count)-i)
+                    f = open('log_debug.log','a')
+                    f.write(st+'\n')
+                    f.close()
                     print(st)
 
         #print('Total schemas: '+ len(schemas).__str__())
