@@ -25,7 +25,7 @@ logger_main.addHandler(handler_main)
 # -----------------------------------------------------------
 
 # ---------------------- Base Constants ---------------------
-url = 'https://api.binance.com'
+url = 'https://api.bitget.com'
 info = {}
 symbols = {}
 time_const = {
@@ -52,9 +52,10 @@ class Schema:
 
     base_count = 100
     second_count = 0.00
+    third_count = 0.00
     final_count = 0.00
 
-    fee = 0.00075
+    fee = 0.002
     final_percent = 0.00
 
     __first_symbol: dict
@@ -71,28 +72,32 @@ class Schema:
 
     def calculate_schema(self, symbols: dict):
         self.__first_symbol = symbols[self.first_pair]
-        self.base_currency = self.__first_symbol['quoteAsset']
-        self.second_currency = self.__first_symbol['baseAsset']
+        self.base_currency = self.__first_symbol['main']['quoteCoin']
+        self.second_currency = self.__first_symbol['main']['baseCoin']
         self.__second_symbol = symbols[self.second_pair]
-        self.third_currency = self.__second_symbol['baseAsset']
+        self.third_currency = self.__second_symbol['main']['baseCoin']
         # self.__third_symbol = symbols[self.__third_pair]
         try:
-            self.proxy_currency = self.__first_symbol['baseAsset']
-            self.first_rate = float(self.__first_symbol['askPrice'])
-            self.proxy_count = self.base_count / self.first_rate * (1 - self.fee)
-            self.proxy_currency = self.__second_symbol['quoteAsset']
-            self.second_rate = float(self.__second_symbol['askPrice'])
-            self.proxy_count = self.proxy_count / self.second_rate * (1 - self.fee)
+            self.proxy_currency = self.__first_symbol['main']['baseCoin']
+            self.first_rate = float(self.__first_symbol['trade_data']['sellOne'])
+            fee = float(self.__first_symbol['main']['takerFeeRate'])
+            self.proxy_count = self.base_count / self.first_rate * (1 - fee)
             self.second_count = self.proxy_count
-            # self.proxy_currency = self.__third_symbol['baseAsset']
-            # self.proxy_count = self.second_count * self.__third_symbol['bidPrice']
-            self.third_pair = self.__second_symbol['baseAsset'] + self.__first_symbol['quoteAsset']
-            if self.__second_symbol['quoteAsset'] != self.__first_symbol['baseAsset']: self.error = True
+            self.proxy_currency = self.__second_symbol['main']['quoteCoin']
+            self.second_rate = float(self.__second_symbol['trade_data']['sellOne'])
+            fee = float(self.__second_symbol['main']['takerFeeRate'])
+            self.proxy_count = self.proxy_count / self.second_rate * (1 - fee)
+            self.third_count = self.proxy_count
+            # self.proxy_currency = self.__third_symbol['baseCoin']
+            # self.proxy_count = self.second_count * self.__third_symbol['trade_data']['sellOne']
+            self.third_pair = self.__second_symbol['main']['baseCoin'] + self.__first_symbol['main']['quoteCoin']
+            if self.__second_symbol['main']['quoteCoin'] != self.__first_symbol['main']['baseCoin']: self.error = True
             if self.third_pair == self.second_pair: self.error = True
             self.__third_symbol = symbols[self.third_pair]
-            self.proxy_currency = self.__third_symbol['baseAsset']
-            self.third_rate = float(self.__third_symbol['bidPrice'])
-            self.final_count = self.second_count * self.third_rate * (1 - self.fee)
+            self.proxy_currency = self.__third_symbol['main']['baseCoin']
+            self.third_rate = float(self.__third_symbol['trade_data']['buyOne'])
+            fee = float(self.__third_symbol['main']['takerFeeRate'])
+            self.final_count = self.third_count * self.third_rate * (1 - fee)
             # self.final_count = self.proxy_count
             self.calculate_percent(self.base_count, self.final_count)
         except:
@@ -105,136 +110,45 @@ class Schema:
         return perc
 
 
-#-----------------------------------------------------------
+# -----------------------------------------------------------
 
-def get_symbol_market(symbol_name: str):
-    path = '/api/v3/ticker/bookTicker?symbol=' + symbol_name
+
+def get_all_tickers(symbols_dict: dict):
+    path = '/api/spot/v1/market/tickers'
     r = requests.get(url + path)
-    buf = r.content.decode('utf-8')
-    js = json.loads(buf)
-    bidPrice = float(js['bidPrice'])
-    askPrice = float(js['askPrice'])
-    bidQty = float(js['bidQty'])
-    askQty = float(js['askQty'])
-    o = {'symbol': symbol_name,
-         'bidPrice': bidPrice,
-         'bidQty': bidQty,
-         'askPrice': askPrice,
-         'askQty': askQty}
-    return o
+    data = json.loads(r.content.decode('utf-8'))['data']
+    glob_buf = {}
+    loc_buf = {}
+    for symbol in data:
+        loc_buf = {
+            symbol['symbol']: {
+                'trade_data': symbol,
+                'main': symbols_dict[symbol['symbol']]
+            }
+        }
+        glob_buf.update(loc_buf)
+    return glob_buf
 
 
-def get_exchange_info(fname):
-    path = '/api/v3/exchangeInfo'
+def get_symbols_data(fname='symbols.json'):
+    path = '/api/spot/v1/public/products'
     r = requests.get(url + path)
-    d = json.loads(r.content.decode('utf-8'))
+    data = json.loads(r.content.decode('utf-8'))['data']
+    buf = {}
+    for symbol in data:
+        buf.update({symbol['symbolName']: symbol})
+    buf = get_all_tickers(buf)
+    js = json.dumps(buf, indent=4).encode('utf-8')
     f = open(fname, 'wb')
-    f.write(json.dumps(d, indent=4).encode('utf-8'))
+    f.write(js)
     f.close()
-    for symbol in d['symbols']:
-        symbols.update({symbol['symbol']: symbol})
-    f = open('symbols_' + fname, 'wb')
-    f.write(json.dumps(symbols, indent=4).encode('utf-8'))
-    f.close()
-    return d
-
-
-def get_symbols_data(fname):
-    f = open(fname, 'rb')
-    time_period = 0
-    time_limit = 0
-    d = json.loads(f.read().decode('utf-8'))
-    f.close()
-    rateLimits = info['rateLimits']
-    max_requests_in_second = 0
-    for limit in rateLimits:
-        if limit['rateLimitType'] == 'RAW_REQUESTS':
-            time_period = time_const[limit['interval']].__int__() * limit['intervalNum'].__int__()
-            time_period_minutes = time_period // 60
-            time_limit = limit['limit'].__int__()
-            max_requests_in_second = time_limit // time_period
-    s_count = 500
-    urls = []
-    path = '/api/v3/ticker/bookTicker'
-    s_names = []
-    i = 0
-    k = 0
-    for symbol in d:
-        k += 1
-        if i < s_count:
-            if k < len(d):
-                s_names.append(symbol)
-                i += 1
-            else:
-                s_names.append(symbol)
-                # print(symbol)
-                buf = '%5B%22' + '%22,%22'.join(s_names) + '%22%5D'
-                buf = '?symbols=' + buf
-                i = 0
-                buf = url + path + buf
-                # print(buf)
-                urls.append(buf)
-                s_names = []
-        else:
-            buf = '%5B%22' + '%22,%22'.join(s_names) + '%22%5D'
-            buf = '?symbols=' + buf
-            i = 0
-            buf = url + path + buf
-            # print(buf)
-            urls.append(buf)
-            s_names = []
-    now = datetime.datetime.now()
-    i = 0
-
-    def go(d, u, i):
-        r = requests.get(u)
-        i += 1
-        buf = r.content.decode('utf-8')
-        js = json.loads(buf)
-        now_time = datetime.datetime.now().strftime('%d.%m.%Y %H:%M:%S')
-        for item in js:
-            bdict = d[item['symbol']]
-            bdict.update({'bidPrice': item['bidPrice'],
-                          'bidQty': item['bidQty'],
-                          'askPrice': item['askPrice'],
-                          'askQty': item['askQty'],
-                          'updTime': now_time})
-            d.update({item['symbol']: bdict})
-
-    for u in urls:
-        if datetime.datetime.now() > now:
-            time.sleep(1)
-            now = datetime.datetime.now()
-            go(d, u, i)
-        else:
-            if i < max_requests_in_second:
-                go(d, u, i)
-            else:
-                time.sleep(1)
-                now = datetime.datetime.now()
-                go(d, u, i)
-    f = open('s.json', 'wb')
-    f.write(json.dumps(d, indent=4).encode('utf-8'))
-    f.close()
-    return d
-
-
-def get_exchange_symbols(fname):
-    f = open(fname, 'rb')
-    d = json.loads(f.read().decode('utf-8'))
-    f.close()
-    dd = {}
-    for s in d:
-        if ('SPOT' in d[s]['permissions']) and (d[s]['status'] == 'TRADING'):
-            dd.update({s: d[s]})
-    # print(dd)
-    return dd
+    return buf
 
 
 def find_3rd_pair(first_pair, second_pair, symbols_dict):
     third_pair = 'NONE'
     try:
-        third_pair = symbols_dict[second_pair]['baseAsset'] + symbols_dict[first_pair]['quoteAsset']
+        third_pair = symbols_dict[second_pair]['main']['baseCoin'] + symbols_dict[first_pair]['main']['quoteCoin']
         # print(third_pair)
     except:
         third_pair = 'NONE'
@@ -244,77 +158,70 @@ def find_3rd_pair(first_pair, second_pair, symbols_dict):
         return True
 
 
-def check_schema(schema: Schema):
-    s_names = [schema.first_pair, schema.second_pair, schema.third_pair]
-    buf = '%5B%22' + '%22,%22'.join(s_names) + '%22%5D'
-    path = '/api/v3/ticker/bookTicker?symbols=' + buf
-    r = requests.get(url + path)
-    d = {}
-    js = json.loads(r.content.decode('utf-8'))
-    for symbol in js:
-        d.update({symbol['symbol']: symbol})
-    first_symbol = d[schema.first_pair]
-    second_symbol = d[schema.second_pair]
-    third_symbol = d[schema.third_pair]
-    first_rate = float(first_symbol['askPrice'])
-    proxy_count = schema.base_count / first_rate * (1 - schema.fee)
-    second_rate = float(second_symbol['askPrice'])
-    proxy_count = proxy_count / second_rate * (1 - schema.fee)
-    second_count = proxy_count
-    third_rate = float(third_symbol['bidPrice'])
-    final_count = second_count * third_rate * (1 - schema.fee)
-    schema.first_rate = first_rate
-    schema.second_rate = second_rate
-    schema.third_rate = third_rate
-    schema.final_count = final_count
-    schema.final_percent = schema.calculate_percent(schema.base_count, schema.final_count)
-    logger_stream.debug(
-        f'{first_symbol["symbol"]} ({first_rate}) -> {second_symbol["symbol"]} ({second_rate}) -> {third_symbol["symbol"]} ({third_rate}) -> {base_currency} ({final_count})')
-    o = final_count - base_count
-    return o
-
-
-if __name__ == '__main__':
-    base_count = 100
-    base_currency = 'BUSD'
-    stf = 'BOT STARTED with {0} {1}\n'.format(base_count.__str__(), base_currency)
-    logger_main.info(stf)
+def get_all_schemas(symbols_dict: dict):
     schemas = []
-    full_income = 0
-    start_time = datetime.datetime.now()
-    info = get_exchange_info('info.json')
-    symbols = get_symbols_data('symbols_info.json')
-    symbols = get_exchange_symbols('s.json')
-    for first_symbol in symbols:
-        for second_symbol in symbols:
+    for first_symbol in symbols_dict:
+        for second_symbol in symbols_dict:
             # print(first_symbol + " : "+ second_symbol)
             status = find_3rd_pair(first_symbol, second_symbol, symbols)
             if status:
                 s = Schema(first_symbol, second_symbol)
                 s.calculate_schema(symbols)
                 if not (s.error):
-                    if s.base_currency in ['BUSD', 'USDT', 'USDC']:
-                        schemas.append(s)
-    logger_main.info(f'Total schemas: {str(len(schemas))}')
-    threshold = 0
-    logger_main.info(f'Current profit threshold: {str(threshold)}')
-    pairs = []
-    for item in schemas:
-        pairs.append(item.first_pair)
-        pairs.append(item.second_pair)
-        pairs.append(item.third_pair)
-    print(len(pairs))
-    pairs = set(pairs)
-    logger_main.info(f'Updating {str(len(pairs))} pairs...')
-    print(len(pairs))
+                    # if s.base_currency in ['BUSD', 'USDT', 'USDC']:
+                    logger_stream.info(s.first_pair + ' ' + s.second_pair + ' ' + s.third_pair)
+                    schemas.append(s)
+    #print(len(schemas))
+    return schemas
+
+
+def check_schema(schema: Schema,symbols_dict:dict):
+    s_names = [schema.first_pair, schema.second_pair, schema.third_pair]
+    path = '/api/spot/v1/market/depth?'
+    tickers = {}
+    for s_name in s_names:
+        buf = f'symbol={s_name}_SPBL&type=step0&limit=3'
+        u = url + path + buf
+        r = requests.get(u)
+        js = json.loads(r.content.decode('utf-8'))
+        tickers.update({s_name:{'ask':float(js['data']['asks'][0][0]),
+                                'bid':float(js['data']['bids'][0][0])}})
+    for ticker in tickers:
+        symbols_dict[ticker]['trade_data']['sellOne'] = tickers[ticker]['ask']
+        symbols_dict[ticker]['trade_data']['buyOne'] = tickers[ticker]['bid']
+        if ticker == schema.first_pair: schema.first_rate = tickers[ticker]['ask']
+        elif ticker == schema.second_pair: schema.second_rate = tickers[ticker]['ask']
+        elif ticker == schema.third_pair: schema.third_rate = tickers[ticker]['bid']
+    schema.calculate_schema(symbols_dict)
+    schema.final_percent = schema.calculate_percent(schema.base_count, schema.final_count)
+    o = schema.final_count - schema.base_count
+    return o
+
+
+def main_process(threshold, schemas):
+    full_income = 0
+    start_time = datetime.datetime.now()
     while True:
-        symbols = get_exchange_symbols('s.json')
+        curr_time = datetime.datetime.now()
+        if (curr_time - start_time).total_seconds() < 1:
+            time.sleep(1)
+            start_time = datetime.datetime.now()
+        symbols = get_symbols_data('symbols.json')
+        schemas = get_all_schemas(symbols)
+        f_st_time = datetime.datetime.now()
         for sch in schemas:
-            sch.calculate_schema(symbols)
-            if (sch.base_currency in ['BUSD', 'USDT', 'USDC']) and ((sch.final_count - sch.base_count) > threshold):
-                i = check_schema(sch)
-                if i > threshold:
-                    full_income += i
+            # sch.calculate_schema(symbols)
+            # if (sch.final_count - sch.base_count) > (threshold-1):
+            #print(sch.final_count)
+            if sch.base_currency in ['USDT']:
+                i = check_schema(sch, symbols)
+                if (sch.final_count - sch.base_count) > threshold:
+                    #i = check_schema(sch, symbols)
+                    c_st_time = datetime.datetime.now()
+                    if (c_st_time - f_st_time).total_seconds() < 0.05:
+                        time.sleep(0.05)
+                        f_st_time = datetime.datetime.now()
+                    full_income += sch.final_count - sch.base_count
                     """
                     st = '------------------------------------------------------------------\n'
                     st += 'Base count: 100 ' + sch.base_currency + '\n'
@@ -326,16 +233,20 @@ if __name__ == '__main__':
                     st += 'Difference: {0}'.format(float(sch.final_count) - i)+'\n'
                     st += '------------------------------------------------------------------\n\n'
                     """
-                    stf = '[{0}]: {1} {2} -> {3} ({4}) -> {5} ({6}) -> {7} ({8}) =>> {9}; FULL: {10}\n'.format(
+                    stf = '[{0}]: {1} {2} -> {3} ({4}) -> {5} ({6}) -> {7} ({8}) =>> {9}; FULL: {10}'.format(
                         datetime.datetime.now().__str__(), sch.base_count, sch.base_currency, sch.first_pair,
                         sch.first_rate, sch.second_pair, sch.second_rate, sch.third_pair, sch.third_rate,
-                        sch.base_count + i, full_income.__str__())
+                        sch.final_count, full_income.__str__())
                     logger_main.info(stf)
                     logger_stream.info(stf)
+                    print(stf)
                 else:
-                    st = '{0} -> {1} -> {2} -> {0}: Profit: {3}, Difference: {4}'.format(sch.base_currency,
-                                                                                         sch.second_currency,
-                                                                                         sch.third_currency, i, float(
-                            sch.final_count - sch.base_count) - i)
+                    st = f'[{sch.final_count-sch.base_count}]\t{sch.first_pair} r({sch.first_rate} [{sch.second_count}]\t -> {sch.second_pair} r({sch.second_rate} [{sch.third_count}]\t -> {sch.third_pair} r({sch.third_rate} [{sch.final_count}])'
                     logger_stream.info(st)
                     print(st)
+
+
+if __name__ == '__main__':
+    symbols = get_symbols_data('symbols.json')
+    schemas = get_all_schemas(symbols)
+    main_process(0, schemas)
