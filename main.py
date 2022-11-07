@@ -311,7 +311,7 @@ if __name__ == '__main__':
         symbols = get_exchange_symbols('s.json')
         for sch in schemas:
             sch.calculate_schema(symbols)
-            if (sch.base_currency in ['BUSD', 'USDT', 'USDC']) and (sch.final_count - sch.base_count > threshold):
+            if (sch.base_currency in ['BUSD', 'USDT', 'USDC']) and ((sch.final_count - sch.base_count) > threshold):
                 i = check_schema(sch)
                 if i > threshold:
                     full_income += i
