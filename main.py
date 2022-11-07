@@ -25,7 +25,7 @@ logger_main.addHandler(handler_main)
 # -----------------------------------------------------------
 
 # ---------------------- Base Constants ---------------------
-url = 'https://api.bitget.com'
+url = 'https://api.bybit.com'
 info = {}
 symbols = {}
 time_const = {
@@ -113,20 +113,21 @@ class Schema:
 # -----------------------------------------------------------
 
 
-def get_all_tickers(symbols_dict: dict):
-    path = '/api/spot/v1/market/tickers'
+def get_all_tickers(fname='symbols.json'):
+    path = '/spot/v3/public/quote/ticker/bookTicker'
     r = requests.get(url + path)
-    data = json.loads(r.content.decode('utf-8'))['data']
+    data = json.loads(r.content.decode('utf-8'))['result']['list']
     glob_buf = {}
     loc_buf = {}
     for symbol in data:
         loc_buf = {
-            symbol['symbol']: {
-                'trade_data': symbol,
-                'main': symbols_dict[symbol['symbol']]
-            }
+            symbol['symbol']: symbol
         }
         glob_buf.update(loc_buf)
+    js = json.dumps(glob_buf,indent=4).encode('utf-8')
+    f = open(fname,'wb')
+    f.write(js)
+    f.close()
     return glob_buf
 
 
@@ -247,6 +248,4 @@ def main_process(threshold, schemas):
 
 
 if __name__ == '__main__':
-    symbols = get_symbols_data('symbols.json')
-    schemas = get_all_schemas(symbols)
-    main_process(0, schemas)
+    symbols = get_all_tickers('symbols.json')
