@@ -202,7 +202,10 @@ def check_schema(schema: Schema,symbols_dict:dict):
 
 
 def main_process(threshold, schemas=[]):
-    full_income = 0
+    f = open('full-income', 'r')
+    full_income = int(f.read())
+    f.close()
+    #full_income = 0
     start_time = datetime.datetime.now()
     while True:
         curr_time = datetime.datetime.now()
@@ -224,6 +227,9 @@ def main_process(threshold, schemas=[]):
                     #i = check_schema(sch, symbols)
                     c_st_time = datetime.datetime.now()
                     full_income += sch.final_count - sch.base_count
+                    f = open('full-income','w')
+                    f.write(str(full_income))
+                    f.close()
                     """
                     st = '------------------------------------------------------------------\n'
                     st += 'Base count: 100 ' + sch.base_currency + '\n'
