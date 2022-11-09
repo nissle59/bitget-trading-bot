@@ -200,7 +200,7 @@ def check_schema(schema: Schema,symbols_dict:dict):
 
 def main_process(threshold, schemas):
     f = open('full-income', 'r')
-    full_income = int(f.read())
+    full_income = float(f.read())
     f.close()
     #full_income = 0
     start_time = datetime.datetime.now()
