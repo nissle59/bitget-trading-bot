@@ -313,7 +313,7 @@ def main_process(threshold, schemas):
                             sch.third.buy_price,
                             sch.base_count + i,
                             full_income.__str__())
-                        logger_main.info(stf)
+                        #logger_main.info(stf)
                         logger_stream.info(stf)
                         print(stf)
                     else:
