@@ -38,6 +38,51 @@ time_const = {
 # -----------------------------------------------------------
 # ----------------------- Classes Init ----------------------
 class Schema:
+    class Pair:
+        name: str
+        first_name: str
+        second_name: str
+        sell_price: float
+        buy_price: float
+        sell_vol: float
+        buy_vol: float
+        min_trade: float
+        taker_fee: float
+        maker_fee: float
+        price_scale: int
+        qty_scale: int
+        status: bool
+        count: float
+        exist = False
+
+        def __init__(self, symbol: dict):
+            self.count = 0
+            self.name = symbol['main']['symbolName']
+            self.first_name = symbol['main']['baseCoin']
+            self.second_name = symbol['main']['quoteCoin']
+            self.sell_price = float(symbol['trade_data']['sellOne'])
+            self.buy_price = float(symbol['trade_data']['buyOne'])
+            self.taker_fee = float(symbol['main']['takerFeeRate'])
+            self.maker_fee = float(symbol['main']['makerFeeRate'])
+            self.exist = True
+            try:
+                self.sell_vol = float(symbol['trade_data']['sellVol'])
+                self.buy_vol = float(symbol['trade_data']['buyVol'])
+            except:
+                self.sell_vol = 0
+                self.buy_vol = 0
+            self.min_trade = float(symbol['main']['minTradeAmount'])
+            self.price_scale = int(symbol['main']['priceScale'])
+            self.qty_scale = int(symbol['main']['quantityScale'])
+            if symbol['main']['status'] == 'online':
+                self.status = True
+            else:
+                self.status = False
+
+    first: Pair
+    second: Pair
+    third: Pair
+
     base_currency = ''
     second_currency = ''
     third_currency = ''
@@ -46,24 +91,12 @@ class Schema:
     second_pair = ''
     third_pair = ''
 
-    first_rate = 0
-    second_rate = 0
-    third_rate = 0
-
     base_count = 100
-    second_count = 0.00
-    third_count = 0.00
     final_count = 0.00
 
-    fee = 0.002
     final_percent = 0.00
 
-    __first_symbol: dict
-    __second_symbol: dict
-    __third_symbol: dict
     error = False
-    proxy_currency = ''
-    proxy_count = 0.00
 
     def __init__(self, first_pair, second_pair, base_count=100):
         self.first_pair = first_pair
@@ -71,34 +104,35 @@ class Schema:
         self.base_count = base_count
 
     def calculate_schema(self, symbols: dict):
-        self.__first_symbol = symbols[self.first_pair]
-        self.base_currency = self.__first_symbol['main']['quoteCoin']
-        self.second_currency = self.__first_symbol['main']['baseCoin']
-        self.__second_symbol = symbols[self.second_pair]
-        self.third_currency = self.__second_symbol['main']['baseCoin']
-        # self.__third_symbol = symbols[self.__third_pair]
+        self.first = Schema.Pair(symbols[self.first_pair])
+        self.base_currency = self.first.second_name
+        self.second_currency = self.first.first_name
+        self.second = Schema.Pair(symbols[self.second_pair])
+        self.third_currency = self.second.first_name
+        self.third_pair = self.third_currency + self.base_currency
         try:
-            self.proxy_currency = self.__first_symbol['main']['baseCoin']
-            self.first_rate = float(self.__first_symbol['trade_data']['sellOne'])
-            fee = float(self.__first_symbol['main']['takerFeeRate'])
-            self.proxy_count = self.base_count / self.first_rate * (1 - fee)
-            self.second_count = self.proxy_count
-            self.proxy_currency = self.__second_symbol['main']['quoteCoin']
-            self.second_rate = float(self.__second_symbol['trade_data']['sellOne'])
-            fee = float(self.__second_symbol['main']['takerFeeRate'])
-            self.proxy_count = self.proxy_count / self.second_rate * (1 - fee)
-            self.third_count = self.proxy_count
-            # self.proxy_currency = self.__third_symbol['baseCoin']
-            # self.proxy_count = self.second_count * self.__third_symbol['trade_data']['sellOne']
-            self.third_pair = self.__second_symbol['main']['baseCoin'] + self.__first_symbol['main']['quoteCoin']
-            if self.__second_symbol['main']['quoteCoin'] != self.__first_symbol['main']['baseCoin']: self.error = True
+            self.third = Schema.Pair(symbols[self.third_pair])
+
+            fee = self.first.taker_fee
+            self.first.count = self.base_count / self.first.sell_price * (1 - fee)  # BUY First coin
+
+            fee = self.second.taker_fee
+            self.second.count = self.first.count / self.second.sell_price * (1 - fee)  # BUY Second coin for First coin
+
+            fee = self.third.taker_fee
+            self.final_count = self.second.count * self.third.buy_price * (1 - fee)  # SELL Second coin for Base coin
+            # -------------- Condition!!! ---------------------------
+            if not self.third.exist: self.error = True
+            if self.first.status and self.second.status and self.third.status:
+                self.error = False
+            else:
+                self.error = True
+            if self.third.second_name != self.first.second_name: self.error = True
+            if self.first.first_name != self.second.second_name: self.error = True
             if self.third_pair == self.second_pair: self.error = True
-            self.__third_symbol = symbols[self.third_pair]
-            self.proxy_currency = self.__third_symbol['main']['baseCoin']
-            self.third_rate = float(self.__third_symbol['trade_data']['buyOne'])
-            fee = float(self.__third_symbol['main']['takerFeeRate'])
-            self.final_count = self.third_count * self.third_rate * (1 - fee)
-            # self.final_count = self.proxy_count
+            # print(self.error)
+            # --------------------------------------------------------
+
             self.calculate_percent(self.base_count, self.final_count)
         except:
             self.error = True
@@ -165,44 +199,76 @@ def get_all_schemas(symbols_dict: dict):
             # print(first_symbol + " : "+ second_symbol)
             status = find_3rd_pair(first_symbol, second_symbol, symbols)
             if status:
+                # print(first_symbol+" "+second_symbol)
                 s = Schema(first_symbol, second_symbol)
                 s.calculate_schema(symbols)
                 if not (s.error):
+                    # print(s.first_pair + " -> " + s.second_pair + " -> " + s.third_pair)
                     # if s.base_currency in ['BUSD', 'USDT', 'USDC']:
-                    logger_stream.info(s.first_pair + ' ' + s.second_pair + ' ' + s.third_pair)
+                    # logger_stream.info(s.first_pair + ' ' + s.second_pair + ' ' + s.third_pair)
                     schemas.append(s)
     #print(len(schemas))
     return schemas
 
 
-def check_schema(schema: Schema,symbols_dict:dict):
+def check_vol(schema: Schema, in_count=100.00):
+    volume = False
+    f_count = in_count / schema.first.sell_price * (1 - schema.first.taker_fee)
+    if schema.first.sell_vol >= f_count:
+        s_count = f_count / schema.second.sell_price * (1 - schema.second.taker_fee)
+        if schema.second.sell_vol >= s_count:
+            t_count = s_count * schema.third.buy_price * (1 - schema.third.taker_fee)
+            if schema.second.sell_vol >= t_count:
+                volume = True
+    return volume
+
+
+def check_schema(schema: Schema, symbols_dict: dict):
     s_names = [schema.first_pair, schema.second_pair, schema.third_pair]
-    path = '/api/spot/v1/market/depth?'
     tickers = {}
     for s_name in s_names:
-        buf = f'symbol={s_name}_SPBL&type=step0&limit=3'
-        u = url + path + buf
-        r = requests.get(u)
-        js = json.loads(r.content.decode('utf-8'))
-        tickers.update({s_name:{'ask':float(js['data']['asks'][0][0]),
-                                'bid':float(js['data']['bids'][0][0])}})
+        tickers.update(get_actual_trade_data(s_name))
     for ticker in tickers:
         symbols_dict[ticker]['trade_data']['sellOne'] = tickers[ticker]['ask']
+        symbols_dict[ticker]['trade_data']['sellVol'] = tickers[ticker]['askVol']
         symbols_dict[ticker]['trade_data']['buyOne'] = tickers[ticker]['bid']
-        if ticker == schema.first_pair: schema.first_rate = tickers[ticker]['ask']
-        elif ticker == schema.second_pair: schema.second_rate = tickers[ticker]['ask']
-        elif ticker == schema.third_pair: schema.third_rate = tickers[ticker]['bid']
+        symbols_dict[ticker]['trade_data']['buyVol'] = tickers[ticker]['bidVol']
+        if ticker == schema.first_pair:
+            schema.first_rate = tickers[ticker]['ask']
+        elif ticker == schema.second_pair:
+            schema.second_rate = tickers[ticker]['ask']
+        elif ticker == schema.third_pair:
+            schema.third_rate = tickers[ticker]['bid']
     schema.calculate_schema(symbols_dict)
     schema.final_percent = schema.calculate_percent(schema.base_count, schema.final_count)
     o = schema.final_count - schema.base_count
     return o
 
 
+def get_actual_trade_data(symbol: str) -> dict:
+    path = '/api/spot/v1/market/depth?'
+    buf = f'symbol={symbol}_SPBL&type=step0&limit=2'
+    u = url + path + buf
+    r = requests.get(u)
+    js = json.loads(r.content.decode('utf-8'))
+    ticker = {
+        symbol: {
+            'ask': float(js['data']['asks'][0][0]),
+            'askVol': float(js['data']['asks'][0][1]),
+            'bid': float(js['data']['bids'][0][0]),
+            'bidVol': float(js['data']['bids'][0][1])
+        }
+    }
+    return ticker
+
+
 def main_process(threshold, schemas):
-    f = open('full-income', 'r')
-    full_income = float(f.read())
-    f.close()
-    #full_income = 0
+    try:
+        f = open('full-income', 'r')
+        full_income = float(f.read())
+        f.close()
+    except:
+        full_income = 0
     start_time = datetime.datetime.now()
     while True:
         curr_time = datetime.datetime.now()
@@ -210,49 +276,57 @@ def main_process(threshold, schemas):
             time.sleep(1)
             start_time = datetime.datetime.now()
         symbols = get_symbols_data('symbols.json')
+        #print(len(symbols))
         schemas = get_all_schemas(symbols)
         f_st_time = datetime.datetime.now()
+        #print(len(schemas))
         for sch in schemas:
-            # sch.calculate_schema(symbols)
-            # if (sch.final_count - sch.base_count) > (threshold-1):
-            #print(sch.final_count)
             if sch.base_currency in ['USDT']:
                 i = check_schema(sch, symbols)
                 if (sch.final_count - sch.base_count) > threshold:
-                    #i = check_schema(sch, symbols)
                     c_st_time = datetime.datetime.now()
                     if (c_st_time - f_st_time).total_seconds() < 0.05:
                         time.sleep(0.05)
                         f_st_time = datetime.datetime.now()
-                    full_income += sch.final_count - sch.base_count
-                    f = open('full-income', 'w')
-                    f.write(str(full_income))
-                    f.close()
-                    """
-                    st = '------------------------------------------------------------------\n'
-                    st += 'Base count: 100 ' + sch.base_currency + '\n'
-                    st += sch.first_pair + ' ' + sch.first_rate.__str__() + ' ' + sch.second_count.__str__() + ' ' + ';'.join(symbols[sch.first_pair]['permissions']) +'\n'
-                    st += sch.second_pair + ' ' + sch.second_rate.__str__() + ' ' + sch.proxy_count.__str__() + '\n'
-                    st += sch.third_pair + ' ' + sch.third_rate.__str__() + ' ' + sch.final_count.__str__() + '\n'
-                    st += 'In fact profit will be '+i.__str__()+' '+sch.base_currency + '\n'
-                    st += 'Total in '+ (datetime.datetime.now() - start_time).__str__() + ': +'+ round(full_income,2).__str__() + ' USD\n'
-                    st += 'Difference: {0}'.format(float(sch.final_count) - i)+'\n'
-                    st += '------------------------------------------------------------------\n\n'
-                    """
-                    stf = '[{0}]: {1} {2} -> {3} ({4}) -> {5} ({6}) -> {7} ({8}) =>> {9}; FULL: {10}'.format(
-                        datetime.datetime.now().__str__(), sch.base_count, sch.base_currency, sch.first_pair,
-                        sch.first_rate, sch.second_pair, sch.second_rate, sch.third_pair, sch.third_rate,
-                        sch.final_count, full_income.__str__())
-                    logger_main.info(stf)
-                    logger_stream.info(stf)
-                    print(stf)
+                    if check_vol(sch, sch.base_count):
+                        full_income += sch.final_count - sch.base_count
+                        f = open('full-income', 'w')
+                        f.write(str(full_income))
+                        f.close()
+
+                        stf = '[=^_^=] {0}: {1} {2} -> {3} ({4}) -> {5} ({6}) -> {7} ({8}) =>> {9}; FULL: {10}'.format(
+                            'OK', sch.base_count, sch.base_currency, sch.first_pair,
+                            sch.first.sell_price, sch.second_pair, sch.second.sell_price, sch.third_pair,
+                            sch.third.buy_price,
+                            sch.final_count, full_income.__str__())
+                        logger_main.info(stf)
+                        logger_stream.info(stf)
+                        print(stf)
+                    else:
+                        stf = '[:-(] {0}: {1} {2} -> {3} ({4}) -> {5} ({6}) -> {7} ({8}) =>> {9}; FULL: {10}'.format(
+                            'Insufficient VOL',
+                            sch.base_count,
+                            sch.base_currency,
+                            sch.first_pair,
+                            sch.first.sell_price,
+                            sch.second_pair,
+                            sch.second.sell_price,
+                            sch.third_pair,
+                            sch.third.buy_price,
+                            sch.final_count,
+                            full_income.__str__())
+                        logger_main.info(stf)
+                        logger_stream.info(stf)
+                        print(stf)
                 else:
-                    st = f'[{sch.final_count-sch.base_count}]\t{sch.first_pair} r({sch.first_rate} [{sch.second_count}]\t -> {sch.second_pair} r({sch.second_rate} [{sch.third_count}]\t -> {sch.third_pair} r({sch.third_rate} [{sch.final_count}])'
+                    st = f'[{sch.final_count - sch.base_count}] {sch.first_pair} r({sch.first.sell_price} [{sch.first.count}] -> {sch.second_pair} r({sch.second.sell_price} [{sch.second.count}] -> {sch.third_pair} r({sch.third.buy_price} [{sch.final_count}])'
                     logger_stream.info(st)
                     print(st)
 
 
 if __name__ == '__main__':
     symbols = get_symbols_data('symbols.json')
+    print(f'Symbols found: {len(symbols)}')
     schemas = get_all_schemas(symbols)
+    print(f'Schemas found: {len(schemas)}')
     main_process(0, schemas)
