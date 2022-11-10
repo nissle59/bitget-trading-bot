@@ -276,10 +276,8 @@ def main_process(threshold, schemas):
             time.sleep(1)
             start_time = datetime.datetime.now()
         symbols = get_symbols_data('symbols.json')
-        #print(len(symbols))
         schemas = get_all_schemas(symbols)
         f_st_time = datetime.datetime.now()
-        #print(len(schemas))
         for sch in schemas:
             if sch.base_currency in ['USDT']:
                 if sch.final_count - sch.base_count > threshold:
@@ -335,7 +333,7 @@ def main_process(threshold, schemas):
                         logger_stream.info(stf)
                         print(stf)
                 else:
-                    st = f'[{i}] {sch.first_pair} r({sch.first.sell_price} [{sch.first.count}] -> {sch.second_pair} r({sch.second.sell_price} [{sch.second.count}] -> {sch.third_pair} r({sch.third.buy_price} [{sch.base_count + i}])'
+                    st = f'[{sch.final_count - sch.base_count}] {sch.first_pair} r({sch.first.sell_price} [{sch.first.count}] -> {sch.second_pair} r({sch.second.sell_price} [{sch.second.count}] -> {sch.third_pair} r({sch.third.buy_price} [{sch.final_count}])'
                     logger_stream.info(st)
                     print(st)
 
