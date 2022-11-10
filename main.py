@@ -280,7 +280,7 @@ def main_process(threshold, schemas):
         f_st_time = datetime.datetime.now()
         for sch in schemas:
             if sch.base_currency in ['USDT']:
-                if sch.final_count - sch.base_count > threshold:
+                if sch.final_count - sch.base_count > threshold - 1:
                     i = check_schema(sch, symbols)
                     c_st_time = datetime.datetime.now()
                     if (c_st_time - f_st_time).total_seconds() < 0.05:
