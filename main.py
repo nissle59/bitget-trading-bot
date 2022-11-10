@@ -283,13 +283,13 @@ def main_process(threshold, schemas):
         for sch in schemas:
             if sch.base_currency in ['USDT']:
                 i = check_schema(sch, symbols)
-                if (sch.final_count - sch.base_count) > threshold:
+                if i > threshold:
                     c_st_time = datetime.datetime.now()
                     if (c_st_time - f_st_time).total_seconds() < 0.05:
                         time.sleep(0.05)
                         f_st_time = datetime.datetime.now()
                     if check_vol(sch, sch.base_count):
-                        full_income += sch.final_count - sch.base_count
+                        full_income += i
                         f = open('full-income', 'w')
                         f.write(str(full_income))
                         f.close()
@@ -298,7 +298,7 @@ def main_process(threshold, schemas):
                             'OK', sch.base_count, sch.base_currency, sch.first_pair,
                             sch.first.sell_price, sch.second_pair, sch.second.sell_price, sch.third_pair,
                             sch.third.buy_price,
-                            sch.final_count, full_income.__str__())
+                            sch.base_count + i, full_income.__str__())
                         logger_main.info(stf)
                         logger_stream.info(stf)
                         print(stf)
@@ -313,13 +313,13 @@ def main_process(threshold, schemas):
                             sch.second.sell_price,
                             sch.third_pair,
                             sch.third.buy_price,
-                            sch.final_count,
+                            sch.base_count + i,
                             full_income.__str__())
                         logger_main.info(stf)
                         logger_stream.info(stf)
                         print(stf)
                 else:
-                    st = f'[{sch.final_count - sch.base_count}] {sch.first_pair} r({sch.first.sell_price} [{sch.first.count}] -> {sch.second_pair} r({sch.second.sell_price} [{sch.second.count}] -> {sch.third_pair} r({sch.third.buy_price} [{sch.final_count}])'
+                    st = f'[{i}] {sch.first_pair} r({sch.first.sell_price} [{sch.first.count}] -> {sch.second_pair} r({sch.second.sell_price} [{sch.second.count}] -> {sch.third_pair} r({sch.third.buy_price} [{sch.base_count + i}])'
                     logger_stream.info(st)
                     print(st)
 
