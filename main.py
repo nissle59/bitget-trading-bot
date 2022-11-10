@@ -282,13 +282,13 @@ def main_process(threshold, schemas):
         #print(len(schemas))
         for sch in schemas:
             if sch.base_currency in ['USDT']:
-                i = check_schema(sch, symbols)
-                if i > threshold:
+                if sch.final_count - sch.base_count > threshold:
+                    i = check_schema(sch, symbols)
                     c_st_time = datetime.datetime.now()
                     if (c_st_time - f_st_time).total_seconds() < 0.05:
                         time.sleep(0.05)
                         f_st_time = datetime.datetime.now()
-                    if check_vol(sch, sch.base_count):
+                    if check_vol(sch, sch.base_count) and (i > threshold):
                         full_income += i
                         f = open('full-income', 'w')
                         f.write(str(full_income))
@@ -299,6 +299,22 @@ def main_process(threshold, schemas):
                             sch.first.sell_price, sch.second_pair, sch.second.sell_price, sch.third_pair,
                             sch.third.buy_price,
                             sch.base_count + i, full_income.__str__())
+                        logger_main.info(stf)
+                        logger_stream.info(stf)
+                        print(stf)
+                    elif i <= threshold:
+                        stf = '[:-(] {0}: {1} {2} -> {3} ({4}) -> {5} ({6}) -> {7} ({8}) =>> {9}; FULL: {10}'.format(
+                            'BAD CALC',
+                            sch.base_count,
+                            sch.base_currency,
+                            sch.first_pair,
+                            sch.first.sell_price,
+                            sch.second_pair,
+                            sch.second.sell_price,
+                            sch.third_pair,
+                            sch.third.buy_price,
+                            sch.base_count + i,
+                            full_income.__str__())
                         logger_main.info(stf)
                         logger_stream.info(stf)
                         print(stf)
